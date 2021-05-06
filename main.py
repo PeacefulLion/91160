@@ -17,19 +17,19 @@ import random
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # 请修改此处，或者保持为空
-# configs = {
-#     'username': '',
-#     'password': '',
-#     'city_index': '',
-#     'unit_id': '',
-#     'dep_id': '',
-#     'doc_id': [],
-#     'weeks': [],
-#     'days': [],
-#     'unit_name': '',
-#     'dep_name': '',
-#     'doctor_name': []
-# }
+configs = {
+    'username': '',
+    'password': '',
+    'city_index': '',
+    'unit_id': '',
+    'dep_id': '',
+    'doc_id': [],
+    'weeks': [],
+    'days': [],
+    'unit_name': '',
+    'dep_name': '',
+    'doctor_name': []
+}
 
 
 ua = UserAgent()
