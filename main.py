@@ -13,21 +13,24 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5 as Cipher_PKCS1_v1_5
 from base64 import b64decode, b64encode
 from fake_useragent import UserAgent
+import random
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # 请修改此处，或者保持为空
-configs = {
-    'username': '',
-    'password': '',
-    'city_index': '',
-    'unit_id': '',
-    'dep_id': '',
-    'doc_id': '',
-    'weeks': [],
-    'days': [],
-    'unit_name': '',
-    'dep_name': '',
-    'doctor_name': ''
-}
+# configs = {
+#     'username': '',
+#     'password': '',
+#     'city_index': '',
+#     'unit_id': '',
+#     'dep_id': '',
+#     'doc_id': [],
+#     'weeks': [],
+#     'days': [],
+#     'unit_name': '',
+#     'dep_name': '',
+#     'doctor_name': []
+# }
+
 
 ua = UserAgent()
 
@@ -168,7 +171,8 @@ def login(username, password) -> bool:
         "error_num": 0,
         "token": tokens()
     }
-    r = session.post(url, data=data, headers=get_headers(), allow_redirects=False)
+    r = session.post(url, data=data, headers=get_headers(),
+                     allow_redirects=False)
     if r.status_code == 302:
         redirect_url = r.headers["location"]
         session.get(redirect_url, headers=get_headers())
@@ -305,7 +309,8 @@ def get_ticket(ticket, unit_id, dep_id):
     url = "https://www.91160.com/guahao/ysubmit.html"
     logging.error("URL: {}".format(url))
     logging.error("PARAM: {}".format(data))
-    r = session.post(url, data=data, headers=get_headers(), allow_redirects=False)
+    r = session.post(url, data=data, headers=get_headers(),
+                     allow_redirects=False)
     if r.status_code == 302:
         # redirect_url = r.headers["location"]
         # if get_ticket_result(redirect_url):
@@ -436,25 +441,23 @@ def set_doctor_configs():
     url = "https://www.91160.com/dep/getschmast/uid-{}/depid-{}/date-{}/p-0.html".format(
         unit_id, dep_id, now_date)
     r = session.get(url, headers=get_headers())
+    logging.info(r.json())
     doctors = r.json()["doc"]
     doc_id_arr = []
     doc_name = {}
-    if configs["doc_id"] == "":
+    if len(configs["doc_id"]) == 0:
         print("=====请选择医生=====\n")
         for doctor in doctors:
             doc_id_arr.append(doctor["doctor_id"])
             doc_name[doctor["doctor_id"]] = doctor["doctor_name"]
             print("{}. {}".format(doctor["doctor_id"], doctor["doctor_name"]))
         print()
-        while True:
-            doctor_index = input("请输入医生编号: ")
-            is_number = True if re.match(r'^\d+$', doctor_index) else False
-            if is_number and int(doctor_index) in doc_id_arr:
-                configs["doc_id"] = doctor_index
-                configs["doctor_name"] = doc_name[int(doctor_index)]
-                break
-            else:
-                print("输入有误，请重新输入！")
+        doctor_index = input("请输入医生编号: ")
+        doctor_index_arr = doctor_index.split(',')
+        for oneId in doctor_index_arr:
+            if int(oneId) in doc_id_arr:
+                configs['doc_id'].append(oneId)
+                configs['doctor_name'].append(doc_name[int(oneId)])
     else:
         print("当前选择医生为：%s（%s）" % (configs["doctor_name"], configs["doc_id"]))
 
@@ -511,29 +514,57 @@ def run():
     sleep_time = 15
 
     logging.info("刷票开始")
-    logging.info(
-        "https://www.91160.com/doctors/index/docid-{}.html".format(doc_id))
     while True:
         try:
-            # tickets = brush_ticket(unit_id, dep_id, weeks, days)
-            tickets = brush_ticket_new(doc_id, dep_id, weeks, days)
+            for oneId in doc_id:
+                tickets = brush_ticket_new(oneId, dep_id, weeks, days)
+                if len(tickets) > 0:
+                    logging.info(tickets)
+                    logging.info("刷到票了，开抢了...")
+                    get_ticket(tickets[0], unit_id, dep_id)
+                    break
+                else:
+                    logging.info("努力刷票中...")
+                time.sleep(sleep_time)
         except Exception as e:
             logging.error(e)
             break
-        if len(tickets) > 0:
-            logging.info(tickets)
-            logging.info("刷到票了，开抢了...")
-            get_ticket(tickets[0], unit_id, dep_id)
-            break
-        else:
-            logging.info("努力刷票中...")
-        time.sleep(sleep_time)
     logging.info("刷票结束")
     print("当前配置为：\n\t%s" % configs)
 
 
+def runOnce():
+    logging.info(configs)
+    unit_id = configs["unit_id"]
+    dep_id = configs["dep_id"]
+    doc_id = configs["doc_id"]
+    weeks = configs["weeks"]
+    days = configs["days"]
+
+    logging.info("定时刷票：开始")
+    try:
+        for oneId in doc_id:
+            tickets = brush_ticket_new(oneId, dep_id, weeks, days)
+            if len(tickets) > 0:
+                logging.info(tickets)
+                logging.info("定时刷票：刷到票了，开抢了...")
+                get_ticket(tickets[0], unit_id, dep_id)
+            else:
+                logging.info("努力刷票中...")
+                sleep_time = random.randrange(1, 2)
+                time.sleep(sleep_time)
+    except Exception as e:
+        logging.error(e)
+    logging.info("定时刷票：结束")
+
+
 if __name__ == '__main__':
     try:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(runOnce, 'cron', hour=15, minute=0)
+        scheduler.add_job(runOnce, 'cron', hour=15, minute=0, second=1)
+        scheduler.add_job(runOnce, 'cron', hour=15, minute=0, second=3)
+        scheduler.start()
         run()
     except KeyboardInterrupt:
         print("\n=====强制退出=====")
